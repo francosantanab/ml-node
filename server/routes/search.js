@@ -1,14 +1,18 @@
+//Dependencies
 const express = require('express');
 const app = express();
-
 const request = require('request');
 const _ = require('underscore');
 const isDefinedType = require('is-defined-type');
 
-app.get('/api/items', (req, res) => {
+//Middelwares
+const { access } = require('../middelwares/access');
+
+app.get('/api/items', access, (req, res) => {
     let query = req.query.search;
+
     request({
-        url: "https://api.mercadolibre.com/sites/MLA/search?q=".concat(query,'&offset=0&limit=4'),
+        url: `https://api.mercadolibre.com/sites/MLA/search?q=${query}&offset=0&limit=4`,
         method: "GET",
         json: true,
     }, (error, response) => {
@@ -18,7 +22,7 @@ app.get('/api/items', (req, res) => {
                 error
             });
         }
-    
+
         if ((response) && (response.statusCode == 200))
         {
             let collection = {
@@ -29,10 +33,10 @@ app.get('/api/items', (req, res) => {
                 categories: [],
                 items: []
             };
-    
-            _.each(response.body.results, item => 
+
+            _.each(response.body.results, item =>
             {
-    
+
                 let pick = _.pick(item, ['id', 'title', 'price', 'currency_id',
                                          'thumbnail', 'condition', 'shipping']);
                 let fill;
@@ -51,25 +55,25 @@ app.get('/api/items', (req, res) => {
                         free_shipping: pick.shipping.free_shipping
                     }
                 }
-                
+
                 collection.items.push(fill);
             });
-    
+
             let categories = [];
-            _.each(response.body.available_filters, filter => 
+            _.each(response.body.filters, filter =>
             {
                 if ((isDefinedType(filter.id)) && (filter.id == 'category'))
                 {
-                    _.each(filter.values, category => 
+                    _.each(filter.values, category =>
                     {
                         if (category.name)
                         {
                             categories.push(category.name);
                         }
-                    }); 
+                    });
                 }
             });
-    
+
             collection.categories = categories;
             res.json(collection);
         }else
@@ -81,12 +85,12 @@ app.get('/api/items', (req, res) => {
                 });
             }
         }
-        
+
     });
 });
 
 
-app.get('/api/items/:id', (req, res) => {
+app.get('/api/items/:id', access, (req, res) => {
     let param = req.params.id;
     request({
         url: "https://api.mercadolibre.com/items/".concat(param),
@@ -115,21 +119,21 @@ app.get('/api/items/:id', (req, res) => {
                     err
                 });
             }
-        
+
             let product = response.body;
             let description = resp.body;
             let item;
 
             let fillable = _.pick(product, ['id', 'title', 'price', 'currency_id', 'condition', 'pictures', 'shipping', 'sold_quantity']);
 
-            if (Object.keys(fillable).length == 8)
+            if ((Object.keys(fillable).length == 8) && (isDefinedType(fillable.shipping.free_shipping)) && (fillable.pictures[0].secure_url))
             {
                 item = {
                     author: {
                         name: 'Franco',
                         lastname: 'Santana'
                     },
-                    item : { 
+                    item : {
                         id: fillable.id,
                         title: fillable.title,
                         price: {
@@ -148,10 +152,10 @@ app.get('/api/items/:id', (req, res) => {
 
             res.json(item);
         });
-       
+
     });
-    
-    
+
+
 });
-   
+
 module.exports = app;
