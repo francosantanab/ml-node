@@ -8,154 +8,116 @@ const isDefinedType = require('is-defined-type');
 //Middelwares
 const { access } = require('../middelwares/access');
 
+//Helper 
+const utils = require('../helpers/helper');
+
 app.get('/api/items', access, (req, res) => {
-    let query = req.query.search;
+    let query = req.query.q;
 
-    request({
-        url: `https://api.mercadolibre.com/sites/MLA/search?q=${query}&offset=0&limit=4`,
-        method: "GET",
-        json: true,
-    }, (error, response) => {
-        if (error) {
-            return res.status(500).json({
-                ok: false,
-                error
-            });
-        }
-
-        if ((response) && (response.statusCode == 200))
-        {
-            let collection = {
-                author: {
-                    name: 'Franco',
-                    lastname: 'Santana'
-                },
-                categories: [],
-                items: []
-            };
-
-            _.each(response.body.results, item =>
-            {
-
-                let pick = _.pick(item, ['id', 'title', 'price', 'currency_id',
-                                         'thumbnail', 'condition', 'shipping']);
-                let fill;
-                if ((Object.keys(pick).length == 7) && (isDefinedType(pick.shipping.free_shipping)))
-                {
-                    fill = {
-                        id: pick.id,
-                        title: pick.title,
-                        price: {
-                            currency: pick.currency_id,
-                            amount: pick.price,
-                            decimals: 0
-                        },
-                        picture: pick.thumbnail,
-                        condition: pick.condition,
-                        free_shipping: pick.shipping.free_shipping
-                    }
-                }
-
-                collection.items.push(fill);
-            });
-
-            let categories = [];
-            _.each(response.body.filters, filter =>
-            {
-                if ((isDefinedType(filter.id)) && (filter.id == 'category'))
-                {
-                    _.each(filter.values, category =>
-                    {
-                        if (category.name)
-                        {
-                            categories.push(category.name);
-                        }
-                    });
-                }
-            });
-
-            collection.categories = categories;
-            res.json(collection);
-        }else
-        {
-            if (response) {
-                return res.status(response.statusCode).json({
+    if (query)
+    {
+        request({
+            url: `${utils.getUrl()}/sites/MLA/search?q=${query}&offset=0&limit=4`,
+            method: "GET",
+            json: true,
+        }, (error, response) => {
+    
+            if (error) {
+                return res.status(500).json({
                     ok: false,
-                    error: response.body.error
+                    error
                 });
             }
-        }
+    
+            if ((response) && (response.statusCode == 200))
+            {
+                let collection = utils.getCleanedProduct(response);
+                res.json(collection);
+            }else
+            {
+                if (response) {
+                    return res.status(response.statusCode).json({
+                        ok: false,
+                        error: response.body.error
+                    });
+                }
+            }
+    
+        });
+    }else
+    {
+        return res.status(400).json({
+            ok: false,
+            message: "You should provide a search query"
+        });
+    }
 
-    });
 });
 
 
 app.get('/api/items/:id', access, (req, res) => {
+
     let param = req.params.id;
-    request({
-        url: "https://api.mercadolibre.com/items/".concat(param),
-        method: "GET",
-        json: true,
-    }, (error, response) => {
-
-        if (error)
-        {
-            return res.status(500).json({
-                ok: false,
-                error
-            });
-        }
-
+    
+    if (isDefinedType(param))
+    {
         request({
-            url: "https://api.mercadolibre.com/items/".concat(param,'/description'),
+            url: `${utils.getUrl()}/items/${param}`,
             method: "GET",
             json: true,
-        }, (err, resp) => {
-
-            if (err)
+        }, (error, response) => {
+            if (error)
             {
                 return res.status(500).json({
                     ok: false,
-                    err
+                    error
                 });
             }
 
-            let product = response.body;
-            let description = resp.body;
-            let item;
-
-            let fillable = _.pick(product, ['id', 'title', 'price', 'currency_id', 'condition', 'pictures', 'shipping', 'sold_quantity']);
-
-            if ((Object.keys(fillable).length == 8) && (isDefinedType(fillable.shipping.free_shipping)) && (fillable.pictures[0].secure_url))
+            if ((response) && (response.statusCode == 200))
             {
-                item = {
-                    author: {
-                        name: 'Franco',
-                        lastname: 'Santana'
-                    },
-                    item : {
-                        id: fillable.id,
-                        title: fillable.title,
-                        price: {
-                            currency: fillable.currency_id,
-                            amount: fillable.price,
-                            decimals: 0
-                        },
-                        picture: fillable.pictures[0].secure_url,
-                        condition: fillable.condition,
-                        free_shipping: fillable.shipping.free_shipping,
-                        sold_quantity: fillable.sold_quantity,
-                        description: description.plain_text
+                request({
+                    url: `${utils.getUrl()}/items/${param}/description`,
+                    method: "GET",
+                    json: true,
+                }, (err, resp) => {
+
+                    if (err)
+                    {
+                        return res.status(500).json({
+                            ok: false,
+                            err
+                        });
                     }
+
+                    if ((resp)  && (resp.statusCode == 200))
+                    {
+                        let product = response.body;
+                        let description = resp.body;
+
+                        let item = utils.getCleanedFullProduct(product, description);
+                        res.json(item);
+                    }
+
+                });
+            }else 
+            {
+                if (response) {
+                    return res.status(response.statusCode).json({
+                        ok: false,
+                        error: response.body.error
+                    });
                 }
             }
-
-            res.json(item);
         });
 
-    });
-
-
+    }else
+    {
+        return res.status(400).json({
+            ok: false,
+            message: "You should provide a product id"
+        });
+    }
 });
 
 module.exports = app;
