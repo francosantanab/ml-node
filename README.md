@@ -1,0 +1,1 @@
+To start run: 1) npm install 2) nodemon server/server
